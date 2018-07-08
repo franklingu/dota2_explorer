@@ -1,3 +1,50 @@
-from django.shortcuts import render
+"""Views for dota2app
+"""
+from rest_framework.views import APIView
+from rest_framework.response import Response as APIResponse
+from rest_framework import status as HTTPStatus
 
-# Create your views here.
+
+from . import dbmanager
+
+class GetPlayersView(APIView):
+    """Get list of players based on name or account_id
+    """
+    def get(self, request):
+        message, status, data = 'ok', 200, {}
+        try:
+            players = request.query_params.get('players').split(',')
+            drange = request.data.get('range')
+            data = dbmanager.get_players_rank(players, drange)
+        except ValueError as err:
+            message = str(err)
+            status = HTTPStatus.HTTP_400_BAD_REQUEST
+        return APIResponse({'message': message, 'data': data}, status=status)
+
+
+class ComparePlayersView(APIView):
+    """Compare players' skills
+    """
+    def get(self, request):
+        message, status, data = 'ok', 200, {}
+        try:
+            players = request.query_params.get('players').split(',')
+            data = dbmanager.compare_players(players)
+        except ValueError as err:
+            message = str(err)
+            status = HTTPStatus.HTTP_400_BAD_REQUEST
+        return APIResponse({'message': message, 'data': data}, status=status)
+
+
+class RecommendHeroView(APIView):
+    """Recommend hero for player
+    """
+    def get(self, request):
+        message, status, data = 'ok', 200, {}
+        try:
+            player = request.query_params.get('player')
+            data = dbmanager.recommend_hero(player)
+        except ValueError as err:
+            message = str(err)
+            status = HTTPStatus.HTTP_400_BAD_REQUEST
+        return APIResponse({'message': message, 'data': data}, status=status)
