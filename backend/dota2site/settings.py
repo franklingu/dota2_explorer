@@ -24,9 +24,42 @@ SECRET_KEY = 'd@af)tc9lrq3n%9q29gi#u)t_bkhr6-4um!7-udbarztbe)$n7'
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
+DEBUG = False if os.environ.get('DJANGO_DEPLOYMENT') else True
+if not DEBUG:
+    SECRET_KEY = os.environ['DJANGO_SECRET_KEY']
+    # currently no ssl support at the moment
+    CSRF_COOKIE_SECURE = False
+    SESSION_COOKIE_SECURE = False
+    CSRF_COOKIE_HTTPONLY = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    SECURE_BROWSER_XSS_FILTER = True
+    X_FRAME_OPTIONS = 'DENY'
 
+SITE_ID = 1
 ALLOWED_HOSTS = []
+if not DEBUG:
+    ALLOWED_HOSTS.append(os.environ.get('NGINX_SERVER_NAME'))
 
+# logging related settings
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'loggers': {
+        'root': {
+            'handlers': ['console'],
+            'level': os.getenv('DJANGO_LOG_LEVEL', 'INFO'),
+        },
+        'django': {
+            'handlers': ['console'],
+            'level': os.getenv('DJANGO_LOG_LEVEL', 'INFO'),
+        },
+    },
+}
 
 # Application definition
 
@@ -39,8 +72,9 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'dota2app',
     'rest_framework',
-    'django_extensions',
 ]
+if DEBUG:
+    INSTALLED_APPS.append('django_extensions')
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -82,6 +116,18 @@ DATABASES = {
         'NAME': os.path.join(BASE_DIR, 'db.sqlite3'),
     }
 }
+if not DEBUG:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': os.environ['POSTGRES_DB'],
+            'USER': os.environ['POSTGRES_USER'],
+            'PASSWORD': os.environ['POSTGRES_PASSWORD'],
+            'HOST': 'dota2_explorer_db',
+            'PORT': '5432',
+            'CONN_MAX_AGE': 3600,
+        }
+    }
 
 
 # Password validation
@@ -108,7 +154,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Asia/Singapore'
 
 USE_I18N = True
 
@@ -121,6 +167,9 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/2.0/howto/static-files/
 
 STATIC_URL = '/static/'
+STATIC_ROOT = './staticfiles/'
+if not DEBUG:
+    STATIC_ROOT = '/usr/src/static/'
 
 # Django Rest
 REST_FRAMEWORK = {

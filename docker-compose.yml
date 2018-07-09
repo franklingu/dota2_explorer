@@ -1,0 +1,50 @@
+version: '2'
+services:
+  dota2_explorer_db:
+    container_name: dota2_explorer_db
+    build: ./deployment/psql
+    mem_limit: 1024m
+    volumes:
+      - /var/lib/postgresql/data
+    expose:
+      - "5432"
+    env_file:
+      - ./deployment/environ/deployment.env
+  dota2_explorer_redis:
+    container_name: dota2_explorer_redis
+    build: ./deployment/redis
+    mem_limit: 2048m
+    expose:
+      - "6379"
+    env_file:
+      - ./deployment/environ/deployment.env
+  dota2_explorer_app:
+    container_name: dota2_explorer_app
+    build:
+      context: .
+      dockerfile: ./backend/Dockerfile
+    command: /usr/src/app/deployment/uwsgi/start.sh
+    mem_limit: 1024m
+    depends_on:
+      - dota2_explorer_db
+    volumes:
+      - /usr/src/static
+    expose:
+      - "8000"
+    env_file:
+      - ./deployment/environ/deployment.env
+  dota2_explorer_nginx:
+    container_name: dota2_explorer_nginx
+    build: ./deployment/nginx
+    command: /bin/bash start.sh
+    mem_limit: 1024m
+    links:
+      - dota2_explorer_app
+    depends_on:
+      - dota2_explorer_app
+    volumes_from:
+      - dota2_explorer_app
+    ports:
+      - "0.0.0.0:8080:80"
+    env_file:
+      - ./deployment/environ/deployment.env
