@@ -3,3 +3,6 @@ djangorestframework==3.8.2
 djangorestframework-jwt==1.11.0
 requests[security]==2.19.1
 psycopg2==2.7.5
+# For development only
+Werkzeug==0.14.1
+django-extensions==2.0.7
