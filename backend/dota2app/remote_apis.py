@@ -25,6 +25,15 @@ class OpenDotaAPI(object):
         """
         return self.get('players/{}'.format(account_id))
 
+    def get_player_matches(self, account_id, date_range=None):
+        """Get player matches
+        """
+        if date_range is None:
+            params = {}
+        else:
+            params = {'date': date_range.days}
+        return self.get('players/{}/matches'.format(account_id), params=params)
+
     def get_player_wl(self, account_id, date_range=None):
         """Get player win/lose
         """

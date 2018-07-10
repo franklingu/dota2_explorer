@@ -1,10 +1,11 @@
 """Logic related to data
 """
 import re
-from datetime import timedelta
+from datetime import datetime, timedelta
 
+import pandas as pd
+from sklearn import linear_model, datasets
 from django.conf import settings
-
 
 from .remote_apis import OpenDotaAPI
 
@@ -81,23 +82,87 @@ def compare_players(players):
     return ret
 
 
+class RecommendHeroBaseModel(object):
+    def __init__(self, api):
+        self.api = api
+
+    def recommend(self, player_acc):
+        raise NotImplementedError('To be implemented')
+
+
+class RecommendHeroSimpleModel(RecommendHeroBaseModel):
+    def recommend(self, player_acc):
+        def sortkey(el):
+            if el['games'] == 0:
+                return 0
+            return -el['win'] / el['games']
+
+        heroes = self.api.get_player_heroes(player_acc)
+        if not heroes:
+            hero = {}
+        else:
+            hero = {
+                'hero_id': sorted(heroes, key=sortkey)[0]['hero_id']
+            }
+        return hero
+
+
+class RecommendHeroLogisticModel(RecommendHeroBaseModel):
+    def recommend(self, player_acc):
+        def extract_win(row):
+            if ((row.player_slot < 128 and row.radiant_win) or
+                (row.player_slot >= 128 and not row.radiant_win)):
+                return 1
+            return 0
+
+        def extract_weight(row):
+            return 1 - 0.01 * (
+                datetime.now() - datetime.fromtimestamp(row.start_time)
+            ).days / 30
+
+        matches = self.api.get_player_matches(player_acc)
+        df = pd.DataFrame(matches)
+        # determine player win: if slot < 128, then player is radiant
+        df['win'] = df.apply(extract_win, axis=1)
+        # assign weight based on timestamp, the older the game, the less important
+        df['weight'] = df.apply(extract_weight, axis=1)
+        # filter out leavers and heros with low appearance
+        df2 = df[df.leaver_status < 1]
+        filtered_heroes = set(
+            df2[['hero_id', 'win']].groupby('hero_id').filter(
+                lambda x: len(x) > 2
+            ).hero_id
+        )
+        df3 = df2[df2.hero_id.isin(filtered_heroes)]
+        # build input data frame
+        df4 = pd.get_dummies(df3.hero_id.astype('category'))
+        df5 = df3[['kills', 'deaths', 'assists', 'hero_id', 'win', 'weight']]
+        df6 = pd.concat([df5, df4], axis=1)
+        logreg = linear_model.LogisticRegression(C=1e5)
+        X = df6[['kills', 'deaths', 'assists'] + list(df4.columns)]
+        Y = df6[['win']]
+        logreg.fit(X, Y)
+        pred = logreg.predict(X)
+        final_result = pd.concat(
+            [df6.hero_id, pd.Series(pred, index=df6.index, name='pred_win')],
+            axis=1
+        ).groupby('hero_id').sum()
+        recommends = list(final_result[
+            final_result.pred_win == final_result.pred_win.max()
+        ].index)
+        if not recommends:
+            return {'hero_id': None}
+        return {'hero_id': recommends[0]}
+
+
 def recommend_hero(player):
     """Recommend a hero for player
     """
-    def sortkey(el):
-        if el['games'] == 0:
-            return 0
-        return -el['win'] / el['games']
-
     if not player:
         raise ValueError('Player must be supplied')
     api = OpenDotaAPI(apikey=getattr(settings, 'OPENDOTA_APIKEY'))
     player_acc = _find_account_id(api, player)
-    heroes = api.get_player_heroes(player_acc)
-    if not heroes:
-        hero = {}
-    else:
-        hero = sorted(heroes, key=sortkey)[0]
+    hero = RecommendHeroLogisticModel(api).recommend(player_acc)
     return {
         'input': player,
         'account_id': player_acc,
