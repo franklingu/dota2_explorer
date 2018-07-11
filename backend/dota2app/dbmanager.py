@@ -4,13 +4,17 @@ import re
 from datetime import datetime, timedelta
 
 import pandas as pd
-from sklearn import linear_model, datasets
+from sklearn import linear_model
 from django.conf import settings
 
 from .remote_apis import OpenDotaAPI
+from .models import (Player, PlayerMatch, PlayerHero)
 
 
-def _find_account_id(api, player):
+g_api = OpenDotaAPI(apikey=getattr(settings, 'OPENDOTA_APIKEY'))
+
+
+def _find_account_id(player):
     """Find account_id for player
     """
     if not player:
@@ -20,7 +24,9 @@ def _find_account_id(api, player):
         account_id = player
     else:
         account_id = None
-    return api.get_account_id(account_id=account_id, username=player)
+    return Player.objects.get_account_id(
+        g_api, account_id=account_id, username=player
+    )
 
 
 def get_players_rank(players, date_range):
@@ -37,9 +43,8 @@ def get_players_rank(players, date_range):
     players = list(set(players))
     if len(players) < 2:
         raise ValueError('There should be at least 2 players')
-    api = OpenDotaAPI(apikey=getattr(settings, 'OPENDOTA_APIKEY'))
     player_accs = [
-        (player, _find_account_id(api, player)) for player in players
+        (player, _find_account_id(player)) for player in players
     ]
     mapping = {
         '1w': 7,
@@ -55,7 +60,9 @@ def get_players_rank(players, date_range):
         ret.append({
             'input': player,
             'account_id': account_id,
-            'rank': api.get_player_wl(account_id, date_range)
+            'rank': PlayerMatch.objects.get_player_wl(
+                g_api, account_id, date_range
+            ),
         })
     return sorted(ret, key=sortkey)
 
@@ -68,24 +75,20 @@ def compare_players(players):
     players = list(set(players))
     if len(players) != 2:
         raise ValueError('Only 2 players can be compared at one time')
-    api = OpenDotaAPI(apikey=getattr(settings, 'OPENDOTA_APIKEY'))
     player_accs = [
-        (player, _find_account_id(api, player)) for player in players
+        (player, _find_account_id(player)) for player in players
     ]
     ret = []
     for player, account_id in player_accs:
         ret.append({
             'input': player,
             'account_id': account_id,
-            'rank': api.get_player_wl(account_id)
+            'rank': PlayerMatch.objects.get_player_wl(g_api, account_id)
         })
     return ret
 
 
 class RecommendHeroBaseModel(object):
-    def __init__(self, api):
-        self.api = api
-
     def recommend(self, player_acc):
         raise NotImplementedError('To be implemented')
 
@@ -97,7 +100,7 @@ class RecommendHeroSimpleModel(RecommendHeroBaseModel):
                 return 0
             return -el['win'] / el['games']
 
-        heroes = self.api.get_player_heroes(player_acc)
+        heroes = PlayerHero.objects.get_player_heroes(g_api, player_acc)
         if not heroes:
             hero = {}
         else:
@@ -111,7 +114,7 @@ class RecommendHeroLogisticModel(RecommendHeroBaseModel):
     def recommend(self, player_acc):
         def extract_win(row):
             if ((row.player_slot < 128 and row.radiant_win) or
-                (row.player_slot >= 128 and not row.radiant_win)):
+                    (row.player_slot >= 128 and not row.radiant_win)):
                 return 1
             return 0
 
@@ -120,7 +123,7 @@ class RecommendHeroLogisticModel(RecommendHeroBaseModel):
                 datetime.now() - datetime.fromtimestamp(row.start_time)
             ).days / 30
 
-        matches = self.api.get_player_matches(player_acc)
+        matches = PlayerMatch.objects.get_player_matches(g_api, player_acc)
         df = pd.DataFrame(matches)
         # determine player win: if slot < 128, then player is radiant
         df['win'] = df.apply(extract_win, axis=1)
@@ -143,10 +146,12 @@ class RecommendHeroLogisticModel(RecommendHeroBaseModel):
         Y = df6[['win']]
         logreg.fit(X, Y)
         pred = logreg.predict(X)
+        # taking win rate here as the single factor. However, frequent hero
+        # should be considered as well
         final_result = pd.concat(
             [df6.hero_id, pd.Series(pred, index=df6.index, name='pred_win')],
             axis=1
-        ).groupby('hero_id').sum()
+        ).groupby('hero_id').mean()
         recommends = list(final_result[
             final_result.pred_win == final_result.pred_win.max()
         ].index)
@@ -160,9 +165,8 @@ def recommend_hero(player):
     """
     if not player:
         raise ValueError('Player must be supplied')
-    api = OpenDotaAPI(apikey=getattr(settings, 'OPENDOTA_APIKEY'))
-    player_acc = _find_account_id(api, player)
-    hero = RecommendHeroLogisticModel(api).recommend(player_acc)
+    player_acc = _find_account_id(player)
+    hero = RecommendHeroLogisticModel().recommend(player_acc)
     return {
         'input': player,
         'account_id': player_acc,

@@ -48,24 +48,23 @@ class OpenDotaAPI(object):
         """
         return self.get('players/{}/heroes'.format(account_id))
 
-    def get_account_id(self, account_id=None, username=None, strict=False):
+    def get_account(self, account_id=None, username=None, strict=False):
         """Get player account_id
         """
         if username is None and account_id is None:
             raise ValueError('Cannot search for such player')
         try:
-            self.get_player(account_id)
-            return account_id
+            return self.get_player(account_id)
         except ValueError:
             pass
         matches = self.get('searchES', params={'q': username})
         if not matches:
             raise ValueError('Cannot search for such player')
         if not strict:
-            return matches[0]['account_id']
+            return matches[0]
         for match in matches:
             if match['personaname'] == username:
-                return match['account_id']
+                return match
         raise ValueError('Cannot search for such player')
 
     def get(self, url, params=None, retry=3, sleep=30):
