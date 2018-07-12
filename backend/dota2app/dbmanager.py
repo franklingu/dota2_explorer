@@ -67,7 +67,7 @@ def get_players_rank(players, date_range):
     return sorted(ret, key=sortkey)
 
 
-def compare_players(players):
+def compare_players(players, date_range):
     """Compare 2 players
     """
     if not players:
@@ -78,12 +78,24 @@ def compare_players(players):
     player_accs = [
         (player, _find_account_id(player)) for player in players
     ]
+    mapping = {
+        '1w': 7,
+        '1m': 30,
+        '1y': 365,
+    }
+    import ipdb; ipdb.set_trace()
+    if date_range in mapping:
+        date_range = timedelta(days=mapping[date_range])
+    else:
+        date_range = None
     ret = []
     for player, account_id in player_accs:
         ret.append({
             'input': player,
             'account_id': account_id,
-            'rank': PlayerMatch.objects.get_player_wl(g_api, account_id)
+            'rank': PlayerMatch.objects.get_player_wl(
+                g_api, account_id, date_range
+            ),
         })
     return ret
 

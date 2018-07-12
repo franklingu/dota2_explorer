@@ -19,7 +19,7 @@ class GetPlayersView(APIView):
             if not players:
                 raise ValueError('Players param is required')
             players = list(csv.reader([players]))[0]
-            drange = request.data.get('range')
+            drange = request.query_params.get('range')
             data = dbmanager.get_players_rank(players, drange)
         except ValueError as err:
             message = str(err)
@@ -37,7 +37,8 @@ class ComparePlayersView(APIView):
             if not players:
                 raise ValueError('Players param is required')
             players = list(csv.reader([players]))[0]
-            data = dbmanager.compare_players(players)
+            drange = request.query_params.get('range')
+            data = dbmanager.compare_players(players, drange)
         except ValueError as err:
             message = str(err)
             status = HTTPStatus.HTTP_400_BAD_REQUEST

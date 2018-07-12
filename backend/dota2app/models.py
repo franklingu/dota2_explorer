@@ -78,7 +78,7 @@ class PlayerMatchManager(models.Manager):
             for match in matches:
                 match_detail = json.loads(match.response)
                 start = datetime.fromtimestamp(match_detail['start_time'])
-                if start + date_range < datetime.now():
+                if date_range and start + date_range < datetime.now():
                     continue
                 player_slot = match_detail['player_slot']
                 radiant_win = match_detail['radiant_win']
