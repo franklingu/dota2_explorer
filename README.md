@@ -14,6 +14,13 @@ Explore stats of Dota2!
   - `python manage.py makemigrations`
   - `python manage.py runserver_plus` : runserver_plus provides some more awesomeness to the development server
 
+### Running
+
+* get players by rank: 'http://localhost:8000/api/get_players/?players=3456,166895253&range=1y'. range could be 1w, 1m, 1y.
+* compare players: 'http://localhost:8000/api/compare_players/?players=166895253,3456'. range could be omitted in both cases, which means not datetime would be considered
+* recommend hero: 'http://localhost:8000/api/recommend_hero/?player=166895253'
+* Note when running at the first time for big accounts, the request will take very long as request and db storing are happening.
+
 ### Architechture
 
 * backend: PostgreSQL in production and SQLite in development.
